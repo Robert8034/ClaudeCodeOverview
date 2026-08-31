@@ -1,0 +1,18 @@
+{
+  "lines": 165,
+  "assistantLines": 72,
+  "dedupedMessages": 22,
+  "inputTokens": 40,
+  "outputTokens": 32623,
+  "cacheCreation": 82477,
+  "cacheRead": 1615382,
+  "models": [
+    "claude-opus-4-8"
+  ],
+  "toolUseBlocks": 31,
+  "skillInvocations": {
+    "in_session": 0,
+    "local_command": 3,
+    "forked": 0
+  }
+}
