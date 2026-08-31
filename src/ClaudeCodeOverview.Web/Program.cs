@@ -1,9 +1,12 @@
+using ApexCharts;
 using ClaudeCodeOverview.Core;
 using ClaudeCodeOverview.Core.Ingestion;
 using ClaudeCodeOverview.Core.Notifications;
 using ClaudeCodeOverview.Core.Queries;
 using ClaudeCodeOverview.Web.Components;
+using ClaudeCodeOverview.Web.Services;
 using Microsoft.Extensions.Options;
+using MudBlazor.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -14,6 +17,10 @@ builder.Services.AddSingleton<IIngestionNotifier>(new IngestionNotifier());
 builder.Services.AddHostedService<IngestionService>();
 builder.Services.AddSingleton<IDashboardQueries>(sp =>
     new DashboardQueries(sp.GetRequiredService<IOptions<ClaudeOverviewOptions>>().Value.ResolveDatabasePath()));
+builder.Services.AddScoped<GlobalFilterState>();
+
+builder.Services.AddMudServices();
+builder.Services.AddApexCharts();
 
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();

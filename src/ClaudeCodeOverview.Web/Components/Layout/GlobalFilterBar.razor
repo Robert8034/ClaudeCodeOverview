@@ -1,0 +1,81 @@
+@inject GlobalFilterState Filters
+@inject IDashboardQueries Queries
+@inject IIngestionNotifier Notifier
+@implements IDisposable
+
+<MudPaper Elevation="0" Outlined="true" Class="pa-2 mb-4 d-flex flex-wrap gap-4 align-center">
+    <MudSelect T="string" Value="Filters.Preset" ValueChanged="v => Filters.SetPreset(v)"
+               Label="Period" Dense="true" Style="max-width: 140px">
+        <MudSelectItem Value="@("today")">Today</MudSelectItem>
+        <MudSelectItem Value="@("7d")">Last 7 days</MudSelectItem>
+        <MudSelectItem Value="@("30d")">Last 30 days</MudSelectItem>
+        <MudSelectItem Value="@("90d")">Last 90 days</MudSelectItem>
+        <MudSelectItem Value="@("all")">All time</MudSelectItem>
+    </MudSelect>
+
+    <MudSelect T="long" MultiSelection="true" SelectedValues="Filters.SelectedProjects"
+               SelectedValuesChanged="v => Filters.SetProjects(v)" Label="Projects" Dense="true"
+               Style="min-width: 220px" Clearable="true">
+        @foreach (var (id, cwd) in _projects)
+        {
+            <MudSelectItem T="long" Value="@id">@ShortName(cwd)</MudSelectItem>
+        }
+    </MudSelect>
+
+    <MudSelect T="string" MultiSelection="true" SelectedValues="Filters.SelectedModels"
+               SelectedValuesChanged="v => Filters.SetModels(v)" Label="Models" Dense="true"
+               Style="min-width: 200px" Clearable="true">
+        @foreach (var m in _models)
+        {
+            <MudSelectItem T="string" Value="@m">@m</MudSelectItem>
+        }
+    </MudSelect>
+
+    <MudSpacer />
+    @if (_backfill is { } b && b.FilesDone < b.FilesTotal)
+    {
+        <MudChip T="string" Color="Color.Info" Size="Size.Small">
+            Backfilling @b.FilesDone/@b.FilesTotal
+        </MudChip>
+    }
+    <MudTooltip Text="Estimated value at API prices — a Pro subscription is flat-fee.">
+        <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">est. API value</MudChip>
+    </MudTooltip>
+</MudPaper>
+
+@code {
+    private List<(long Id, string Cwd)> _projects = [];
+    private List<string> _models = [];
+    private BackfillProgress? _backfill;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Notifier.Changed += OnIngestion;
+        await LoadListsAsync();
+    }
+
+    private async Task LoadListsAsync()
+    {
+        _projects = await Queries.GetProjectsAsync();
+        _models = await Queries.GetKnownModelsAsync();
+    }
+
+    private void OnIngestion(IngestionDelta delta)
+    {
+        _ = InvokeAsync(async () =>
+        {
+            if (delta.Backfill is not null) _backfill = delta.Backfill;
+            if (delta.ProjectIds.Count > 0 || delta.NewUnknownModels) await LoadListsAsync();
+            StateHasChanged();
+        });
+    }
+
+    private static string ShortName(string cwd)
+    {
+        var trimmed = cwd.TrimEnd('\\', '/');
+        var idx = trimmed.LastIndexOfAny(['\\', '/']);
+        return idx >= 0 ? trimmed[(idx + 1)..] : trimmed;
+    }
+
+    public void Dispose() => Notifier.Changed -= OnIngestion;
+}

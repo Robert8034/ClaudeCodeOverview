@@ -1,0 +1,92 @@
+@page "/projects/{ProjectId:long}"
+@using ApexCharts
+@inherits DashboardPage
+@inject NavigationManager Nav
+
+<PageTitle>Project — ClaudeCodeOverview</PageTitle>
+
+<MudBreadcrumbs Items="_crumbs" Class="pa-0 mb-2" />
+
+@if (!Loaded)
+{
+    <MudProgressLinear Indeterminate="true" />
+}
+else
+{
+    <MudText Typo="Typo.h5" Class="mb-3">@(_project?.Slug ?? _project?.Cwd ?? $"Project {ProjectId}")</MudText>
+
+    <MudGrid>
+        <MudItem xs="12">
+            <ChartCard Title="Daily tokens by model">
+                @if (_daily.Count > 0)
+                {
+                    <ApexChart @key="@($"pd-{DataVersion}-{IsDark}")" TItem="DailyPoint" Height="280"
+                               Options="Charts.Base<DailyPoint>(IsDark, stacked: true)">
+                        @foreach (var series in _daily.GroupBy(d => d.Key))
+                        {
+                            <ApexPointSeries TItem="DailyPoint" Items="@series.ToList()" Name="@series.Key"
+                                             SeriesType="SeriesType.Bar"
+                                             XValue="@(e => e.DayLocal)" YValue="@(e => (decimal?)e.Tokens)" />
+                        }
+                    </ApexChart>
+                }
+            </ChartCard>
+        </MudItem>
+        <MudItem xs="12">
+            <MudTable T="SessionSummary" Items="_sessions" Hover="true" Dense="true"
+                      OnRowClick="@(e => Nav.NavigateTo($"/sessions/{e.Item!.SessionId}"))">
+                <HeaderContent>
+                    <MudTh>Session</MudTh>
+                    <MudTh>Start (UTC)</MudTh>
+                    <MudTh>Duration</MudTh>
+                    <MudTh Style="text-align:right">Turns</MudTh>
+                    <MudTh Style="text-align:right">Tokens</MudTh>
+                    <MudTh Style="text-align:right">Est. value</MudTh>
+                    <MudTh Style="text-align:right">Subagents</MudTh>
+                    <MudTh Style="text-align:right">Tool errors</MudTh>
+                    <MudTh>Branch</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd>@(context.Title ?? context.SessionId[..8])</MudTd>
+                    <MudTd>@Short(context.FirstTsUtc)</MudTd>
+                    <MudTd>@Duration(context.FirstTsUtc, context.LastTsUtc)</MudTd>
+                    <MudTd Style="text-align:right">@context.Turns</MudTd>
+                    <MudTd Style="text-align:right">@GlobalFilterState.Tokens(context.Tokens)</MudTd>
+                    <MudTd Style="text-align:right">@Filters.Cost(context.CostUsd)</MudTd>
+                    <MudTd Style="text-align:right">@context.SubagentCount</MudTd>
+                    <MudTd Style="text-align:right">@context.ToolErrors</MudTd>
+                    <MudTd>@context.GitBranch</MudTd>
+                </RowTemplate>
+            </MudTable>
+        </MudItem>
+    </MudGrid>
+}
+
+@code {
+    [Parameter] public long ProjectId { get; set; }
+
+    private readonly List<BreadcrumbItem> _crumbs =
+        [new("Projects", "/projects"), new("Project", null, disabled: true)];
+
+    private ProjectSummary? _project;
+    private List<DailyPoint> _daily = [];
+    private List<SessionSummary> _sessions = [];
+
+    protected override async Task LoadAsync()
+    {
+        var f = Filters.Filter with { ProjectIds = [ProjectId] };
+        _project = (await Queries.GetProjectSummariesAsync(f)).FirstOrDefault();
+        _daily = await Queries.GetDailyByModelAsync(f);
+        _sessions = await Queries.GetSessionsAsync(Filters.Filter, ProjectId);
+    }
+
+    private static string Short(string? iso) =>
+        iso is { Length: >= 16 } ? iso[..16].Replace("T", " ") : iso ?? "";
+
+    private static string Duration(string? first, string? last)
+    {
+        if (!DateTimeOffset.TryParse(first, out var a) || !DateTimeOffset.TryParse(last, out var b)) return "";
+        var d = b - a;
+        return d.TotalHours >= 1 ? $"{(int)d.TotalHours}h {d.Minutes:00}m" : $"{d.Minutes}m";
+    }
+}

@@ -336,7 +336,7 @@ public sealed class DashboardQueries(string dbPath) : IDashboardQueries
         var blocks = (await conn.QueryAsync<BlockInfo>(
             """
             SELECT block_start_utc AS StartUtc, block_end_utc AS EndUtc, tokens AS Tokens,
-                   cost_usd AS CostUsd, messages AS Messages
+                   COALESCE(cost_usd, 0) AS CostUsd, messages AS Messages
             FROM activity_blocks WHERE block_end_utc >= @cut7d ORDER BY block_start_utc
             """, new { cut7d })).ToList();
 

@@ -1,0 +1,115 @@
+@page "/sessions/{SessionId}"
+@inherits DashboardPage
+
+<PageTitle>Session — ClaudeCodeOverview</PageTitle>
+
+<MudBreadcrumbs Items="_crumbs" Class="pa-0 mb-2" />
+
+@if (!Loaded)
+{
+    <MudProgressLinear Indeterminate="true" />
+}
+else if (_detail is null)
+{
+    <MudAlert Severity="Severity.Warning">Session not found.</MudAlert>
+}
+else
+{
+    <MudText Typo="Typo.h5">@(_detail.Title ?? _detail.SessionId)</MudText>
+    <MudText Typo="Typo.caption" Class="mb-3 d-block">
+        @_detail.SessionId · branch @(_detail.GitBranch ?? "-") · CLI @(_detail.CliVersion ?? "-")
+    </MudText>
+
+    @if (_detail.Skills.Count > 0)
+    {
+        <div class="d-flex gap-2 mb-3 flex-wrap">
+            @foreach (var s in _detail.Skills)
+            {
+                <MudChip T="string" Size="Size.Small" Color="Color.Secondary">@s</MudChip>
+            }
+        </div>
+    }
+
+    <MudGrid>
+        <MudItem xs="12" md="7">
+            <ChartCard Title="Turns" MinHeight="200">
+                <MudTable T="SessionTurn" Items="_detail.Turns" Dense="true" Height="480px" FixedHeader="true">
+                    <HeaderContent>
+                        <MudTh>Time (UTC)</MudTh>
+                        <MudTh>Model</MudTh>
+                        <MudTh>Effort</MudTh>
+                        <MudTh Style="text-align:right">In</MudTh>
+                        <MudTh Style="text-align:right">Out</MudTh>
+                        <MudTh Style="text-align:right">Cache r/w</MudTh>
+                        <MudTh>Agent</MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd>@(context.TsUtc.Length >= 19 ? context.TsUtc[11..19] : context.TsUtc)</MudTd>
+                        <MudTd>@context.Model</MudTd>
+                        <MudTd>@context.Effort</MudTd>
+                        <MudTd Style="text-align:right">@context.InputTokens</MudTd>
+                        <MudTd Style="text-align:right">@context.OutputTokens</MudTd>
+                        <MudTd Style="text-align:right">
+                            @GlobalFilterState.Tokens(context.CacheRead) / @GlobalFilterState.Tokens(context.CacheCreation)
+                        </MudTd>
+                        <MudTd>
+                            @if (context.AgentId is not null)
+                            {
+                                <MudTooltip Text="@(context.AttributionSkill is null ? context.AgentId : $"{context.AgentId} · skill {context.AttributionSkill}")">
+                                    <MudChip T="string" Size="Size.Small">@context.AgentId[..Math.Min(6, context.AgentId.Length)]</MudChip>
+                                </MudTooltip>
+                            }
+                        </MudTd>
+                    </RowTemplate>
+                </MudTable>
+            </ChartCard>
+        </MudItem>
+        <MudItem xs="12" md="5">
+            <ChartCard Title="Subagents" MinHeight="200">
+                @if (_detail.Agents.Count == 0)
+                {
+                    <MudText Typo="Typo.body2">No subagents in this session.</MudText>
+                }
+                else
+                {
+                    <MudTable T="SessionAgent" Items="_detail.Agents" Dense="true">
+                        <HeaderContent>
+                            <MudTh>Agent</MudTh>
+                            <MudTh>Type</MudTh>
+                            <MudTh>Skill</MudTh>
+                            <MudTh Style="text-align:right">Tokens</MudTh>
+                            <MudTh Style="text-align:right">Est. value</MudTh>
+                        </HeaderContent>
+                        <RowTemplate>
+                            <MudTd>
+                                <MudTooltip Text="@(context.Description ?? context.AgentId)">
+                                    <span>
+                                        @(new string(' ', 2 * Math.Max(0, (context.SpawnDepth ?? 1) - 1)))@context.AgentId[..Math.Min(8, context.AgentId.Length)]
+                                    </span>
+                                </MudTooltip>
+                            </MudTd>
+                            <MudTd>@(context.AgentType ?? "?")</MudTd>
+                            <MudTd>@context.SkillName</MudTd>
+                            <MudTd Style="text-align:right">@GlobalFilterState.Tokens(context.Tokens)</MudTd>
+                            <MudTd Style="text-align:right">@Filters.Cost(context.CostUsd)</MudTd>
+                        </RowTemplate>
+                    </MudTable>
+                }
+            </ChartCard>
+        </MudItem>
+    </MudGrid>
+}
+
+@code {
+    [Parameter] public string SessionId { get; set; } = "";
+
+    private readonly List<BreadcrumbItem> _crumbs =
+        [new("Projects", "/projects"), new("Session", null, disabled: true)];
+
+    private SessionDetail? _detail;
+
+    protected override bool LiveUpdates => false; // drill-down: refresh on navigation
+
+    protected override async Task LoadAsync() =>
+        _detail = await Queries.GetSessionDetailAsync(SessionId);
+}

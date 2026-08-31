@@ -1,0 +1,161 @@
+@page "/settings"
+@inherits DashboardPage
+@inject ISnackbar Snackbar
+
+<PageTitle>Settings — ClaudeCodeOverview</PageTitle>
+
+@if (!Loaded)
+{
+    <MudProgressLinear Indeterminate="true" />
+}
+else
+{
+    @if (_health is { UnknownModels.Count: > 0 })
+    {
+        <MudAlert Severity="Severity.Warning" Class="mb-3">
+            Models without a pricing row (their costs show as missing, never as 0):
+            @string.Join(", ", _health.UnknownModels). Add rows below.
+        </MudAlert>
+    }
+
+    <MudGrid>
+        <MudItem xs="12" md="7">
+            <ChartCard Title="Pricing (USD per million tokens)" MinHeight="200"
+                       Tooltip="Anthropic API list prices. Editing recomputes every stored cost and rebuilds activity blocks. Verify at platform.claude.com/pricing.">
+                <MudTable T="PricingEdit" Items="_pricing" Dense="true">
+                    <HeaderContent>
+                        <MudTh>Model prefix</MudTh>
+                        <MudTh>Input</MudTh>
+                        <MudTh>Output</MudTh>
+                        <MudTh>Cache w 5m</MudTh>
+                        <MudTh>Cache w 1h</MudTh>
+                        <MudTh>Cache read</MudTh>
+                        <MudTh />
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd>@context.ModelPattern</MudTd>
+                        <MudTd><MudNumericField T="double" @bind-Value="context.InUsd" Format="N2" Margin="Margin.Dense" HideSpinButtons="true" /></MudTd>
+                        <MudTd><MudNumericField T="double" @bind-Value="context.OutUsd" Format="N2" Margin="Margin.Dense" HideSpinButtons="true" /></MudTd>
+                        <MudTd><MudNumericField T="double" @bind-Value="context.W5m" Format="N2" Margin="Margin.Dense" HideSpinButtons="true" /></MudTd>
+                        <MudTd><MudNumericField T="double" @bind-Value="context.W1h" Format="N2" Margin="Margin.Dense" HideSpinButtons="true" /></MudTd>
+                        <MudTd><MudNumericField T="double" @bind-Value="context.Read" Format="N2" Margin="Margin.Dense" HideSpinButtons="true" /></MudTd>
+                        <MudTd>
+                            <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary"
+                                       OnClick="() => SaveAsync(context)">Save</MudButton>
+                        </MudTd>
+                    </RowTemplate>
+                </MudTable>
+
+                <MudDivider Class="my-3" />
+                <MudText Typo="Typo.subtitle2" Class="mb-1">Add pricing row</MudText>
+                <div class="d-flex gap-2 align-center flex-wrap">
+                    <MudTextField T="string" @bind-Value="_newPattern" Label="Model prefix" Margin="Margin.Dense"
+                                  HelperText="@(_health?.UnknownModels.FirstOrDefault() is { } m ? $"e.g. {m}" : "e.g. claude-opus-6")" />
+                    <MudNumericField T="double" @bind-Value="_newIn" Label="Input" Margin="Margin.Dense" HideSpinButtons="true" />
+                    <MudNumericField T="double" @bind-Value="_newOut" Label="Output" Margin="Margin.Dense" HideSpinButtons="true" />
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="AddAsync">Add</MudButton>
+                </div>
+                <MudText Typo="Typo.caption">
+                    Cache rates default to write 5m = 1.25× input, write 1h = 2× input, read = 0.1× input; edit after adding.
+                </MudText>
+            </ChartCard>
+        </MudItem>
+
+        <MudItem xs="12" md="5">
+            <ChartCard Title="Data health" MinHeight="200">
+                @if (_health is not null)
+                {
+                    <MudSimpleTable Dense="true">
+                        <tbody>
+                            <tr><td>Transcript files (active)</td><td>@_health.FilesActive</td></tr>
+                            <tr><td>Files deleted at source (rows kept)</td><td>@_health.FilesDeleted</td></tr>
+                            <tr><td>Files in error state</td><td>@_health.FilesError</td></tr>
+                            <tr><td>Usage events stored</td><td>@_health.UsageEventCount</td></tr>
+                            <tr><td>Parse errors (total)</td><td>@_health.TotalParseErrors</td></tr>
+                            <tr><td>Unknown record types (total)</td><td>@_health.TotalUnknownTypes</td></tr>
+                            <tr><td>Last transcript write</td><td>@_health.LastIngestUtc</td></tr>
+                        </tbody>
+                    </MudSimpleTable>
+
+                    @if (_health.UnknownRecordTypes.Count > 0)
+                    {
+                        <MudText Typo="Typo.subtitle2" Class="mt-3">Unknown record types (schema drift)</MudText>
+                        <MudText Typo="Typo.body2">
+                            @string.Join(", ", _health.UnknownRecordTypes.Select(kv => $"{kv.Key} ({kv.Value})"))
+                        </MudText>
+                    }
+
+                    @if (_health.RecentParseErrors.Count > 0)
+                    {
+                        <MudText Typo="Typo.subtitle2" Class="mt-3">Recent parse errors</MudText>
+                        <MudTable T="ParseErrorRow" Items="_health.RecentParseErrors" Dense="true" Height="220px" FixedHeader="true">
+                            <HeaderContent><MudTh>File</MudTh><MudTh>Line</MudTh><MudTh>Snippet</MudTh></HeaderContent>
+                            <RowTemplate>
+                                <MudTd>@System.IO.Path.GetFileName(context.File)</MudTd>
+                                <MudTd>@context.LineNo</MudTd>
+                                <MudTd><code>@Truncate(context.Snippet)</code></MudTd>
+                            </RowTemplate>
+                        </MudTable>
+                    }
+                }
+                <MudAlert Severity="Severity.Normal" Dense="true" Class="mt-3">
+                    Keep more history on the Claude Code machine: add
+                    <code>"cleanupPeriodDays": 365</code> to <code>%USERPROFILE%\.claude\settings.json</code> there.
+                    This app never edits that file; its own database keeps history regardless.
+                </MudAlert>
+            </ChartCard>
+        </MudItem>
+    </MudGrid>
+}
+
+@code {
+    private sealed class PricingEdit
+    {
+        public string ModelPattern = "";
+        public double InUsd, OutUsd, W5m, W1h, Read;
+    }
+
+    private List<PricingEdit> _pricing = [];
+    private DataHealth? _health;
+    private string _newPattern = "";
+    private double _newIn, _newOut;
+
+    protected override bool LiveUpdates => false;
+
+    protected override async Task LoadAsync()
+    {
+        _pricing = (await Queries.GetPricingAsync())
+            .Select(p => new PricingEdit
+            {
+                ModelPattern = p.ModelPattern, InUsd = p.InUsd, OutUsd = p.OutUsd,
+                W5m = p.CacheW5mUsd, W1h = p.CacheW1hUsd, Read = p.CacheRUsd,
+            })
+            .OrderBy(p => p.ModelPattern)
+            .ToList();
+        _health = await Queries.GetDataHealthAsync();
+    }
+
+    private async Task SaveAsync(PricingEdit e)
+    {
+        await Queries.UpsertPricingAsync(new PricingRow(e.ModelPattern, e.InUsd, e.OutUsd, e.W5m, e.W1h, e.Read));
+        Snackbar.Add($"Pricing for {e.ModelPattern} saved; all costs recomputed.", Severity.Success);
+        await ReloadAsync();
+    }
+
+    private async Task AddAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_newPattern) || _newIn <= 0 || _newOut <= 0)
+        {
+            Snackbar.Add("Model prefix, input and output prices are required.", Severity.Warning);
+            return;
+        }
+        await Queries.UpsertPricingAsync(new PricingRow(
+            _newPattern.Trim(), _newIn, _newOut, _newIn * 1.25, _newIn * 2, _newIn * 0.1));
+        Snackbar.Add($"Pricing for {_newPattern} added; all costs recomputed.", Severity.Success);
+        _newPattern = "";
+        _newIn = _newOut = 0;
+        await ReloadAsync();
+    }
+
+    private static string Truncate(string? s) => s is null ? "" : (s.Length > 80 ? s[..80] + "…" : s);
+}

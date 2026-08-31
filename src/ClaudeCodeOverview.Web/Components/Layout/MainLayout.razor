@@ -1,9 +1,71 @@
-﻿@inherits LayoutComponentBase
+@inherits LayoutComponentBase
+@inject GlobalFilterState Filters
+@inject IDashboardQueries Queries
 
-@Body
+<MudThemeProvider @ref="_themeProvider" @bind-IsDarkMode="_isDark" />
+<MudPopoverProvider />
+<MudDialogProvider />
+<MudSnackbarProvider />
+
+<MudLayout>
+    <MudAppBar Elevation="1" Dense="true">
+        <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" Edge="Edge.Start"
+                       OnClick="@(() => _drawerOpen = !_drawerOpen)" />
+        <MudText Typo="Typo.h6" Class="mr-4">Claude Code Overview</MudText>
+        <MudSpacer />
+        <MudTooltip Text="Costs are estimated value at API prices — a Pro subscription is flat-fee.">
+            <MudSwitch T="bool" Value="Filters.ShowEur" ValueChanged="v => Filters.SetEur(v)"
+                       Label="EUR" Color="Color.Secondary" Class="mr-2" />
+        </MudTooltip>
+        <MudIconButton Icon="@(_isDark ? Icons.Material.Filled.LightMode : Icons.Material.Filled.DarkMode)"
+                       Color="Color.Inherit" OnClick="@(() => _isDark = !_isDark)" />
+    </MudAppBar>
+
+    <MudDrawer @bind-Open="_drawerOpen" Elevation="1" ClipMode="DrawerClipMode.Always">
+        <MudNavMenu>
+            <MudNavLink Href="/" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Dashboard">Overview</MudNavLink>
+            <MudNavLink Href="/projects" Icon="@Icons.Material.Filled.Folder">Projects</MudNavLink>
+            <MudNavLink Href="/skills" Icon="@Icons.Material.Filled.AutoAwesome">Skills</MudNavLink>
+            <MudNavLink Href="/tools" Icon="@Icons.Material.Filled.Build">Tools &amp; Agents</MudNavLink>
+            <MudNavLink Href="/activity" Icon="@Icons.Material.Filled.CalendarMonth">Activity</MudNavLink>
+            <MudNavLink Href="/settings" Icon="@Icons.Material.Filled.Settings">Settings</MudNavLink>
+        </MudNavMenu>
+    </MudDrawer>
+
+    <MudMainContent>
+        <MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="py-4">
+            <GlobalFilterBar />
+            <CascadingValue Value="_isDark" Name="IsDark">
+                @Body
+            </CascadingValue>
+        </MudContainer>
+    </MudMainContent>
+</MudLayout>
 
 <div id="blazor-error-ui" data-nosnippet>
     An unhandled error has occurred.
     <a href="." class="reload">Reload</a>
     <span class="dismiss">🗙</span>
 </div>
+
+@code {
+    private bool _drawerOpen = true;
+    private bool _isDark = true;
+    private MudThemeProvider? _themeProvider;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && _themeProvider is not null)
+        {
+            try
+            {
+                _isDark = await _themeProvider.GetSystemDarkModeAsync();
+                StateHasChanged();
+            }
+            catch
+            {
+                // Pre-render/JS not ready: keep the default.
+            }
+        }
+    }
+}

@@ -1,0 +1,121 @@
+@page "/skills"
+@using ApexCharts
+@inherits DashboardPage
+
+<PageTitle>Skills — ClaudeCodeOverview</PageTitle>
+
+<MudAlert Severity="Severity.Info" Dense="true" Class="mb-3">
+    These are proxies of usage, cost and friction — they cannot tell whether a skill's output was
+    correct or accepted. Attributed tokens/cost/errors/duration are available for
+    <strong>forked (background) skills</strong> only in v1.
+</MudAlert>
+
+@if (!Loaded)
+{
+    <MudProgressLinear Indeterminate="true" />
+}
+else
+{
+    <MudTable T="SkillScorecardRow" Items="_scorecard" Hover="true" Dense="true"
+              OnRowClick="@(e => SelectSkill(e.Item!.SkillName))">
+        <HeaderContent>
+            <MudTh>Skill</MudTh>
+            <MudTh>Shapes</MudTh>
+            <MudTh Style="text-align:right">Invocations</MudTh>
+            <MudTh Style="text-align:right">Trend (30d vs prior)</MudTh>
+            <MudTh Style="text-align:right">Attributed tokens</MudTh>
+            <MudTh Style="text-align:right">Attributed value</MudTh>
+            <MudTh Style="text-align:right">Tool error rate</MudTh>
+            <MudTh Style="text-align:right">Median run</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd><strong>@context.SkillName</strong></MudTd>
+            <MudTd>
+                @foreach (var shape in context.Shapes.Split('+'))
+                {
+                    <MudChip T="string" Size="MudBlazor.Size.Small" Variant="Variant.Outlined">@shape</MudChip>
+                }
+            </MudTd>
+            <MudTd Style="text-align:right">@context.Invocations</MudTd>
+            <MudTd Style="text-align:right">@Trend(context)</MudTd>
+            <MudTd Style="text-align:right">@GlobalFilterState.Tokens(context.AttributedTokens)</MudTd>
+            <MudTd Style="text-align:right">@Filters.Cost(context.AttributedCostUsd)</MudTd>
+            <MudTd Style="text-align:right">
+                @(context.AttributedToolCalls > 0
+                    ? $"{100.0 * context.AttributedToolErrors / context.AttributedToolCalls:N1}% of {context.AttributedToolCalls}"
+                    : "—")
+            </MudTd>
+            <MudTd Style="text-align:right">@(context.MedianRunSeconds is { } s ? $"{TimeSpan.FromSeconds(s):hh\\:mm\\:ss}" : "—")</MudTd>
+        </RowTemplate>
+    </MudTable>
+
+    @if (_selectedSkill is not null)
+    {
+        <ChartCard Title="@($"{_selectedSkill}: invocations and attributed tokens per day")" MinHeight="280">
+            @if (_skillDaily.Count > 0)
+            {
+                <ApexChart @key="@($"sd-{_selectedSkill}-{DataVersion}-{IsDark}")" TItem="SkillDailyPoint" Height="240"
+                           Options="Charts.Base<SkillDailyPoint>(IsDark)">
+                    <ApexPointSeries TItem="SkillDailyPoint" Items="_skillDaily" Name="Invocations"
+                                     SeriesType="SeriesType.Bar"
+                                     XValue="@(e => e.DayLocal)" YValue="@(e => (decimal?)e.Invocations)" />
+                    <ApexPointSeries TItem="SkillDailyPoint" Items="_skillDaily" Name="Attributed tokens"
+                                     SeriesType="SeriesType.Line"
+                                     XValue="@(e => e.DayLocal)" YValue="@(e => (decimal?)e.AttributedTokens)" />
+                </ApexChart>
+            }
+            else
+            {
+                <MudText Typo="Typo.body2">No invocations in the selected period.</MudText>
+            }
+        </ChartCard>
+    }
+
+    <MudExpansionPanels Class="mt-4">
+        <MudExpansionPanel Text="@($"Built-in slash commands ({_builtins.Sum(b => b.Invocations)} invocations — not skills, shown separately)")">
+            <MudTable T="BuiltinCommandRow" Items="_builtins" Dense="true">
+                <HeaderContent>
+                    <MudTh>Command</MudTh>
+                    <MudTh Style="text-align:right">Invocations</MudTh>
+                    <MudTh>Last used (UTC)</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd>/@context.CommandName</MudTd>
+                    <MudTd Style="text-align:right">@context.Invocations</MudTd>
+                    <MudTd>@(context.LastUsedUtc is { Length: >= 16 } t ? t[..16].Replace("T", " ") : "")</MudTd>
+                </RowTemplate>
+            </MudTable>
+        </MudExpansionPanel>
+    </MudExpansionPanels>
+}
+
+@code {
+    private List<SkillScorecardRow> _scorecard = [];
+    private List<BuiltinCommandRow> _builtins = [];
+    private List<SkillDailyPoint> _skillDaily = [];
+    private string? _selectedSkill;
+
+    protected override async Task LoadAsync()
+    {
+        var f = Filters.Filter;
+        _scorecard = await Queries.GetSkillScorecardAsync(f, Filters.TodayLocal);
+        _builtins = await Queries.GetBuiltinCommandsAsync(f);
+        if (_selectedSkill is not null)
+            _skillDaily = await Queries.GetSkillDailyAsync(f, _selectedSkill);
+    }
+
+    private void SelectSkill(string skill)
+    {
+        _selectedSkill = skill;
+        _ = InvokeAsync(async () =>
+        {
+            _skillDaily = await Queries.GetSkillDailyAsync(Filters.Filter, skill);
+            StateHasChanged();
+        });
+    }
+
+    private static string Trend(SkillScorecardRow r) =>
+        r.InvocationsPrior30 == 0
+            ? (r.InvocationsLast30 > 0 ? "new" : "—")
+            : $"{(r.InvocationsLast30 - r.InvocationsPrior30) * 100.0 / r.InvocationsPrior30:+0;-0;0}%";
+}

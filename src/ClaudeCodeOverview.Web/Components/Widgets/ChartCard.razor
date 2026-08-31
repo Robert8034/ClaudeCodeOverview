@@ -1,0 +1,19 @@
+<MudPaper Elevation="1" Class="pa-3" Style="@($"min-height: {MinHeight}px")">
+    <div class="d-flex align-center mb-2">
+        <MudText Typo="Typo.subtitle1">@Title</MudText>
+        @if (!string.IsNullOrEmpty(Tooltip))
+        {
+            <MudTooltip Text="@Tooltip">
+                <MudIcon Icon="@Icons.Material.Outlined.Info" Size="Size.Small" Class="ml-1" />
+            </MudTooltip>
+        }
+    </div>
+    @ChildContent
+</MudPaper>
+
+@code {
+    [Parameter, EditorRequired] public string Title { get; set; } = "";
+    [Parameter] public string? Tooltip { get; set; }
+    [Parameter] public int MinHeight { get; set; } = 300;
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+}

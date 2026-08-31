@@ -1,113 +1,144 @@
 @page "/"
-@using ClaudeCodeOverview.Core.Notifications
-@using ClaudeCodeOverview.Core.Queries
-@inject IDashboardQueries Queries
-@inject IIngestionNotifier Notifier
-@implements IDisposable
+@using ApexCharts
+@inherits DashboardPage
 
-<PageTitle>ClaudeCodeOverview</PageTitle>
+<PageTitle>Overview — ClaudeCodeOverview</PageTitle>
 
-<h1>Claude Code Overview</h1>
-<p class="subtitle">
-    Costs are <strong>estimated value at API prices</strong> — a Pro subscription is flat-fee.
-</p>
-
-@if (_backfill is { } b && b.FilesDone < b.FilesTotal)
+@if (!Loaded)
 {
-    <p>Backfilling transcripts… @b.FilesDone / @b.FilesTotal files</p>
+    <MudProgressLinear Indeterminate="true" />
 }
-
-@if (_stats is null)
+else if (_stats is null || _stats.Turns == 0)
 {
-    <p>Loading…</p>
-}
-else if (_stats.Turns == 0)
-{
-    <div class="empty">
-        <h2>No usage data yet</h2>
-        <p>Point <code>ClaudeOverview:DataRoot</code> at a directory containing Claude Code
-           transcripts (<code>~/.claude/projects</code> or its Syncthing mirror) and restart.</p>
-    </div>
+    <MudAlert Severity="Severity.Info" Class="mt-4">
+        <MudText Typo="Typo.h6">No usage data yet</MudText>
+        <MudText>
+            Point <code>ClaudeOverview:DataRoot</code> at a directory containing Claude Code transcripts
+            (<code>~/.claude/projects</code> or its Syncthing mirror) and restart the app.
+            Transcripts older than 30 days are deleted by Claude Code — consider raising
+            <code>cleanupPeriodDays</code> on the machine running Claude Code.
+        </MudText>
+    </MudAlert>
 }
 else
 {
-    <div class="tiles">
-        <div class="tile"><span class="label">Input tokens</span><span class="value">@Fmt(_stats.InputTokens)</span></div>
-        <div class="tile"><span class="label">Output tokens</span><span class="value">@Fmt(_stats.OutputTokens)</span></div>
-        <div class="tile"><span class="label">Cache write</span><span class="value">@Fmt(_stats.CacheCreation)</span></div>
-        <div class="tile"><span class="label">Cache read</span><span class="value">@Fmt(_stats.CacheRead)</span></div>
-        <div class="tile"><span class="label">Est. value (API prices)</span><span class="value">$@_stats.CostUsd.ToString("N2")</span></div>
-        <div class="tile"><span class="label">Net cache savings</span><span class="value">$@_stats.CacheSavingsUsd.ToString("N2")</span></div>
-        <div class="tile"><span class="label">Sessions</span><span class="value">@_stats.Sessions</span></div>
-        <div class="tile"><span class="label">Turns</span><span class="value">@_stats.Turns</span></div>
-        <div class="tile @(_stats.ActiveSessions > 0 ? "active" : "")">
-            <span class="label">Active now</span><span class="value">@_stats.ActiveSessions</span>
-        </div>
+    <div class="d-flex flex-wrap gap-3 mb-4">
+        <StatTile Label="Input tokens" Value="@GlobalFilterState.Tokens(_stats.InputTokens)" />
+        <StatTile Label="Output tokens" Value="@GlobalFilterState.Tokens(_stats.OutputTokens)" />
+        <StatTile Label="Cache write" Value="@GlobalFilterState.Tokens(_stats.CacheCreation)"
+                  Sub="@($"5m {GlobalFilterState.Tokens(_stats.Cache5m)} · 1h {GlobalFilterState.Tokens(_stats.Cache1h)}")" />
+        <StatTile Label="Cache read" Value="@GlobalFilterState.Tokens(_stats.CacheRead)" />
+        <StatTile Label="Est. API value" Value="@Filters.Cost(_stats.CostUsd)" Sub="not a bill — Pro is flat-fee" />
+        <StatTile Label="Net cache savings" Value="@Filters.Cost(_stats.CacheSavingsUsd)" />
+        <StatTile Label="Sessions" Value="@_stats.Sessions.ToString()" />
+        <StatTile Label="Turns" Value="@_stats.Turns.ToString()" Sub="deduped assistant messages" />
+        <StatTile Label="Active now" Value="@_stats.ActiveSessions.ToString()"
+                  Sub="@(_stats.ActiveSessions > 0 ? "session in progress" : "idle")" />
     </div>
 
-    <h2>Per project</h2>
-    <table>
-        <thead><tr><th>Project</th><th>Tokens</th><th>Est. value</th><th>Sessions</th><th>Last activity</th></tr></thead>
-        <tbody>
-            @foreach (var p in _projects)
-            {
-                <tr>
-                    <td title="@p.Cwd">@(p.Slug ?? p.Cwd)</td>
-                    <td>@Fmt(p.Tokens)</td>
-                    <td>$@p.CostUsd.ToString("N2")</td>
-                    <td>@p.Sessions</td>
-                    <td>@p.LastActivityUtc</td>
-                </tr>
-            }
-        </tbody>
-    </table>
+    <MudGrid>
+        <MudItem xs="12" md="8">
+            <ChartCard Title="Daily tokens by model">
+                @if (_dailyByModel.Count > 0)
+                {
+                    <ApexChart @key="@($"daily-{DataVersion}-{IsDark}")" TItem="DailyPoint" Height="320"
+                               Options="Charts.Base<DailyPoint>(IsDark, stacked: true)">
+                        @foreach (var series in _dailyByModel.GroupBy(d => d.Key))
+                        {
+                            <ApexPointSeries TItem="DailyPoint" Items="@series.ToList()" Name="@series.Key"
+                                             SeriesType="SeriesType.Bar"
+                                             XValue="@(e => e.DayLocal)" YValue="@(e => (decimal?)e.Tokens)" />
+                        }
+                    </ApexChart>
+                }
+            </ChartCard>
+        </MudItem>
+        <MudItem xs="12" md="4">
+            <ChartCard Title="Model mix" Tooltip="Total tokens per model in the selected period">
+                @if (_modelMix.Count > 0)
+                {
+                    <ApexChart @key="@($"mix-{DataVersion}-{IsDark}")" TItem="ModelMixRow" Height="320"
+                               Options="Charts.Base<ModelMixRow>(IsDark)">
+                        <ApexPointSeries TItem="ModelMixRow" Items="_modelMix" Name="Tokens"
+                                         SeriesType="SeriesType.Donut"
+                                         XValue="@(e => e.Model)" YValue="@(e => (decimal?)e.Tokens)" />
+                    </ApexChart>
+                }
+            </ChartCard>
+        </MudItem>
+        <MudItem xs="12" md="8">
+            <ChartCard Title="Daily estimated value" Tooltip="At API list prices; 'not a bill'." MinHeight="280">
+                @if (_dailyCost.Count > 0)
+                {
+                    <ApexChart @key="@($"cost-{DataVersion}-{IsDark}")" TItem="DailyPoint" Height="240"
+                               Options="Charts.Base<DailyPoint>(IsDark)">
+                        <ApexPointSeries TItem="DailyPoint" Items="_dailyCost" Name="USD"
+                                         SeriesType="SeriesType.Line"
+                                         XValue="@(e => e.DayLocal)"
+                                         YValue="@(e => (decimal?)Math.Round((decimal)e.CostUsd, 2))" />
+                    </ApexChart>
+                }
+            </ChartCard>
+        </MudItem>
+        <MudItem xs="12" md="4">
+            <ChartCard Title="Current 5-hour window" MinHeight="280"
+                       Tooltip="Anthropic publishes no Pro token caps; the bar is scaled to your busiest observed 5h block.">
+                <MudText Typo="Typo.h4" Style="font-variant-numeric: tabular-nums">
+                    @GlobalFilterState.Tokens(_windows?.Current5hTokens ?? 0)
+                </MudText>
+                <MudText Typo="Typo.caption">tokens in the last 5 hours (estimate)</MudText>
+                <MudProgressLinear Class="my-3"
+                                   Color="@(GaugeFraction > 0.85 ? MudBlazor.Color.Warning : MudBlazor.Color.Primary)"
+                                   Value="@(GaugeFraction * 100)" Rounded="true" Size="MudBlazor.Size.Large" />
+                <MudText Typo="Typo.caption">
+                    busiest observed block: @GlobalFilterState.Tokens(_maxBlockTokens) ·
+                    rolling 7d: @GlobalFilterState.Tokens(_windows?.Rolling7dTokens ?? 0)
+                </MudText>
+            </ChartCard>
+        </MudItem>
+        <MudItem xs="12">
+            <ChartCard Title="Top projects" MinHeight="260">
+                @if (_topProjects.Count > 0)
+                {
+                    <ApexChart @key="@($"proj-{DataVersion}-{IsDark}")" TItem="ProjectSummary" Height="220"
+                               Options="Charts.Base<ProjectSummary>(IsDark, horizontal: true)">
+                        <ApexPointSeries TItem="ProjectSummary" Items="_topProjects" Name="Tokens"
+                                         SeriesType="SeriesType.Bar"
+                                         XValue="@(e => e.Slug ?? e.Cwd)" YValue="@(e => (decimal?)e.Tokens)" />
+                    </ApexChart>
+                }
+            </ChartCard>
+        </MudItem>
+    </MudGrid>
 }
 
 @code {
     private HeadlineStats? _stats;
-    private List<ProjectSummary> _projects = [];
-    private BackfillProgress? _backfill;
-    private bool _refreshing;
+    private List<DailyPoint> _dailyByModel = [];
+    private List<DailyPoint> _dailyCost = [];
+    private List<ModelMixRow> _modelMix = [];
+    private List<ProjectSummary> _topProjects = [];
+    private RateWindows? _windows;
+    private long _maxBlockTokens;
 
-    protected override async Task OnInitializedAsync()
+    private double GaugeFraction =>
+        _maxBlockTokens <= 0 ? 0 : Math.Min(1.0, (double)(_windows?.Current5hTokens ?? 0) / _maxBlockTokens);
+
+    protected override async Task LoadAsync()
     {
-        Notifier.Changed += OnIngestionChanged;
-        await RefreshAsync();
+        var f = Filters.Filter;
+        _stats = await Queries.GetHeadlineStatsAsync(f);
+        _dailyByModel = await Queries.GetDailyByModelAsync(f);
+        _dailyCost = _dailyByModel
+            .GroupBy(d => d.DayLocal)
+            .Select(g => new DailyPoint(g.Key, "USD", 0, g.Sum(x => x.CostUsd)))
+            .OrderBy(d => d.DayLocal)
+            .ToList();
+        _modelMix = await Queries.GetModelMixAsync(f);
+        _topProjects = (await Queries.GetProjectSummariesAsync(f)).Take(5).ToList();
+        _windows = await Queries.GetRateWindowsAsync(DateTimeOffset.UtcNow);
+        _maxBlockTokens = _windows.RecentBlocks.Count > 0
+            ? _windows.RecentBlocks.Max(b => b.Tokens)
+            : _windows.Current5hTokens;
     }
-
-    private void OnIngestionChanged(IngestionDelta delta)
-    {
-        _backfill = delta.Backfill ?? _backfill;
-        _ = InvokeAsync(async () =>
-        {
-            if (_refreshing) return; // latest-wins: the running refresh reads current data anyway
-            await RefreshAsync();
-            StateHasChanged();
-        });
-    }
-
-    private async Task RefreshAsync()
-    {
-        _refreshing = true;
-        try
-        {
-            var filter = new QueryFilter();
-            _stats = await Queries.GetHeadlineStatsAsync(filter);
-            _projects = await Queries.GetProjectSummariesAsync(filter);
-        }
-        finally
-        {
-            _refreshing = false;
-        }
-    }
-
-    private static string Fmt(long n) => n switch
-    {
-        >= 1_000_000_000 => (n / 1_000_000_000d).ToString("N1") + "B",
-        >= 1_000_000 => (n / 1_000_000d).ToString("N1") + "M",
-        >= 1_000 => (n / 1_000d).ToString("N1") + "k",
-        _ => n.ToString(),
-    };
-
-    public void Dispose() => Notifier.Changed -= OnIngestionChanged;
 }

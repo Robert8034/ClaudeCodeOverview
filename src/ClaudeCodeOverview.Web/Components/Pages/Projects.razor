@@ -1,0 +1,44 @@
+@page "/projects"
+@inherits DashboardPage
+@inject NavigationManager Nav
+
+<PageTitle>Projects — ClaudeCodeOverview</PageTitle>
+
+@if (!Loaded)
+{
+    <MudProgressLinear Indeterminate="true" />
+}
+else
+{
+    <MudTable T="ProjectSummary" Items="_projects" Hover="true" Dense="true"
+              OnRowClick="@(e => Nav.NavigateTo($"/projects/{e.Item!.ProjectId}"))">
+        <HeaderContent>
+            <MudTh>Project</MudTh>
+            <MudTh Style="text-align:right">Tokens</MudTh>
+            <MudTh Style="text-align:right">Est. value</MudTh>
+            <MudTh Style="text-align:right">Sessions</MudTh>
+            <MudTh>Last activity (UTC)</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd>
+                <MudTooltip Text="@context.Cwd">
+                    <MudText>@(context.Slug ?? context.Cwd)</MudText>
+                </MudTooltip>
+            </MudTd>
+            <MudTd Style="text-align:right">@GlobalFilterState.Tokens(context.Tokens)</MudTd>
+            <MudTd Style="text-align:right">@Filters.Cost(context.CostUsd)</MudTd>
+            <MudTd Style="text-align:right">@context.Sessions</MudTd>
+            <MudTd>@Short(context.LastActivityUtc)</MudTd>
+        </RowTemplate>
+    </MudTable>
+}
+
+@code {
+    private List<ProjectSummary> _projects = [];
+
+    protected override async Task LoadAsync() =>
+        _projects = await Queries.GetProjectSummariesAsync(Filters.Filter);
+
+    private static string Short(string? iso) =>
+        iso is { Length: >= 16 } ? iso[..16].Replace("T", " ") : iso ?? "";
+}

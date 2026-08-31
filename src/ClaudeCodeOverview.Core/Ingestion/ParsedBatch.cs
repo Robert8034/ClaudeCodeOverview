@@ -50,6 +50,8 @@ public sealed class ParsedBatch
     [
         "assistant", "user", "system", "attachment", "mode", "permission-mode", "ai-title",
         "last-prompt", "file-history-snapshot", "file-history-delta", "queue-operation", "atis-latch",
+        // Metadata records observed on CLI 2.1.251 — no usage payload, safe to skip.
+        "agent-name", "frame-link", "artifact-comment-monitor", "artifact-autoreact-ledger",
     ];
 
     public int UnknownTypeCount =>

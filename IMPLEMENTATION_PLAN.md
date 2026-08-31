@@ -1,5 +1,18 @@
 # Claude Code Overview — Implementation Plan (self-contained handoff)
 
+> **STATUS (2026-08-31): §11 steps 1–4 are DONE and in this repo** — solution scaffold, the
+> complete ingestion engine (tailer, parser with all three skill shapes, two-phase tool events,
+> subagent attribution, watcher + backfill + rescan), SQLite schema + migrator, cost & net-savings
+> calculator, block calculator, notifier, the full `IDashboardQueries` implementation, and a
+> 26-test suite (all green) with fixtures cut from real transcripts. Verified end-to-end against
+> real `~/.claude` data (0 parse errors; totals match independently computed ground truth; live
+> session ingestion works). A minimal Blazor Overview page proves the wiring.
+> **Remaining: §11 step 5 (the full dashboard UI — MudBlazor + Blazor-ApexCharts pages) and
+> step 6 (README, linux-x64 publish, systemd unit), plus the §12 checks on the home setup.**
+> Two deviations from the spec, both improvements found during verification: `record_stats` is
+> keyed per file (see schema), and stdout-echo `local_command` records (no `<command-name>`) are
+> NOT counted as invocations — only records carrying `<command-name>` are.
+
 > **How to use this document.** This is a complete, standalone specification for building a personal
 > Claude Code usage-analytics dashboard. It was produced by a planning session that researched the
 > Claude Code data formats against real transcripts and official docs (2026-08-31, Claude Code

@@ -51,7 +51,7 @@ public sealed record AgentUsageRow(string AgentType, long Spawns, long Tokens, d
 
 public sealed record HeatmapCell(string DayLocal, long Sessions, long Tokens, double CostUsd);
 
-public sealed record BlockInfo(string StartUtc, string EndUtc, long Tokens, double? CostUsd, int Messages);
+public sealed record BlockInfo(string StartUtc, string EndUtc, long Tokens, double CostUsd, long Messages);
 
 public sealed record RateWindows(
     long Current5hTokens, double Current5hCostUsd,

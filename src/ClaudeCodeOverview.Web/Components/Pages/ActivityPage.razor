@@ -1,0 +1,138 @@
+@page "/activity"
+@using ApexCharts
+@inherits DashboardPage
+
+<PageTitle>Activity — ClaudeCodeOverview</PageTitle>
+
+@if (!Loaded)
+{
+    <MudProgressLinear Indeterminate="true" />
+}
+else
+{
+    <MudGrid>
+        <MudItem xs="12">
+            <ChartCard Title="Activity calendar (last 26 weeks)" MinHeight="240"
+                       Tooltip="Tokens per Europe/Amsterdam day. Only days retained locally are shown — Claude Code deletes transcripts after cleanupPeriodDays (default 30).">
+                @if (_heatRows.Count > 0)
+                {
+                    <ApexChart @key="@($"heat-{DataVersion}-{IsDark}")" TItem="HeatCell" Height="200"
+                               Options="Charts.Base<HeatCell>(IsDark)">
+                        @foreach (var row in _heatRows)
+                        {
+                            <ApexPointSeries TItem="HeatCell" Items="@row.Cells" Name="@row.Weekday"
+                                             SeriesType="SeriesType.Heatmap"
+                                             XValue="@(e => e.Week)" YValue="@(e => (decimal?)e.Tokens)" />
+                        }
+                    </ApexChart>
+                }
+            </ChartCard>
+        </MudItem>
+        <MudItem xs="12" md="7">
+            <ChartCard Title="5-hour activity blocks (last 7 days)"
+                       Tooltip="Estimated: Anthropic publishes no Pro token caps. A block starts at the first activity floored to the hour; a gap > 5h starts a new one.">
+                @if (_blocks.Count > 0)
+                {
+                    <ApexChart @key="@($"blocks-{DataVersion}-{IsDark}")" TItem="BlockInfo" Height="260"
+                               Options="Charts.Base<BlockInfo>(IsDark)">
+                        <ApexPointSeries TItem="BlockInfo" Items="_blocks" Name="Tokens"
+                                         SeriesType="SeriesType.Bar"
+                                         XValue="@(e => e.StartUtc.Length >= 16 ? e.StartUtc[5..16].Replace("T", " ") : e.StartUtc)"
+                                         YValue="@(e => (decimal?)e.Tokens)" />
+                    </ApexChart>
+                }
+                else
+                {
+                    <MudText Typo="Typo.body2">No activity in the last 7 days.</MudText>
+                }
+            </ChartCard>
+        </MudItem>
+        <MudItem xs="12" md="5">
+            <ChartCard Title="Session durations">
+                @if (_durations.Count > 0)
+                {
+                    <ApexChart @key="@($"dur-{DataVersion}-{IsDark}")" TItem="DurationBucket" Height="260"
+                               Options="Charts.Base<DurationBucket>(IsDark)">
+                        <ApexPointSeries TItem="DurationBucket" Items="_durations" Name="Sessions"
+                                         SeriesType="SeriesType.Bar"
+                                         XValue="@(e => e.Label)" YValue="@(e => (decimal?)e.SessionCount)" />
+                    </ApexChart>
+                }
+            </ChartCard>
+        </MudItem>
+        <MudItem xs="12" md="7">
+            <ChartCard Title="Lines added / removed per day"
+                       Tooltip="Only from structured patch data on Edit results — never guessed from inputs; not every edit reports it.">
+                @if (_productivity.Count > 0)
+                {
+                    <ApexChart @key="@($"lines-{DataVersion}-{IsDark}")" TItem="ProductivityDay" Height="260"
+                               Options="Charts.Base<ProductivityDay>(IsDark, stacked: true)">
+                        <ApexPointSeries TItem="ProductivityDay" Items="_productivity" Name="Added"
+                                         SeriesType="SeriesType.Bar"
+                                         XValue="@(e => e.DayLocal)" YValue="@(e => (decimal?)e.LinesAdded)" />
+                        <ApexPointSeries TItem="ProductivityDay" Items="_productivity" Name="Removed"
+                                         SeriesType="SeriesType.Bar"
+                                         XValue="@(e => e.DayLocal)" YValue="@(e => (decimal?)(-e.LinesRemoved))" />
+                    </ApexChart>
+                }
+            </ChartCard>
+        </MudItem>
+        <MudItem xs="12" md="5">
+            <ChartCard Title="Commits per day" Tooltip="Successful git commit commands run through Bash/PowerShell tools.">
+                @if (_productivity.Any(p => p.Commits > 0))
+                {
+                    <ApexChart @key="@($"commits-{DataVersion}-{IsDark}")" TItem="ProductivityDay" Height="260"
+                               Options="Charts.Base<ProductivityDay>(IsDark)">
+                        <ApexPointSeries TItem="ProductivityDay" Items="_productivity" Name="Commits"
+                                         SeriesType="SeriesType.Bar"
+                                         XValue="@(e => e.DayLocal)" YValue="@(e => (decimal?)e.Commits)" />
+                    </ApexChart>
+                }
+                else
+                {
+                    <MudText Typo="Typo.body2">No commits detected in the selected period.</MudText>
+                }
+            </ChartCard>
+        </MudItem>
+    </MudGrid>
+}
+
+@code {
+    private sealed record HeatCell(string Week, long Tokens);
+    private sealed record HeatRow(string Weekday, List<HeatCell> Cells);
+
+    private List<HeatRow> _heatRows = [];
+    private List<BlockInfo> _blocks = [];
+    private List<DurationBucket> _durations = [];
+    private List<ProductivityDay> _productivity = [];
+
+    protected override async Task LoadAsync()
+    {
+        var f = Filters.Filter;
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var from = today.AddDays(-26 * 7);
+        var cells = (await Queries.GetActivityHeatmapAsync(from.ToString("yyyy-MM-dd"), today.ToString("yyyy-MM-dd")))
+            .ToDictionary(c => c.DayLocal, c => c.Tokens);
+
+        // 7 weekday rows × 26 week columns (top row Monday), GitHub-style.
+        string[] names = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+        var monday = from.AddDays(-(((int)from.DayOfWeek + 6) % 7));
+        var rows = new List<HeatRow>();
+        for (var dow = 0; dow < 7; dow++)
+        {
+            var row = new List<HeatCell>();
+            for (var week = 0; monday.AddDays(week * 7 + dow) <= today; week++)
+            {
+                var day = monday.AddDays(week * 7 + dow);
+                row.Add(new HeatCell(day.ToString("MM-dd"), cells.GetValueOrDefault(day.ToString("yyyy-MM-dd"))));
+            }
+            rows.Add(new HeatRow(names[dow], row));
+        }
+        rows.Reverse(); // ApexCharts renders the first series at the bottom
+        _heatRows = rows;
+
+        _blocks = (await Queries.GetRateWindowsAsync(DateTimeOffset.UtcNow)).RecentBlocks;
+        _durations = await Queries.GetSessionDurationHistogramAsync(f);
+        _productivity = await Queries.GetProductivityDailyAsync(f);
+    }
+}

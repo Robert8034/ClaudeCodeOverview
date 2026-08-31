@@ -1,0 +1,89 @@
+@page "/tools"
+@using ApexCharts
+@inherits DashboardPage
+
+<PageTitle>Tools &amp; Agents — ClaudeCodeOverview</PageTitle>
+
+@if (!Loaded)
+{
+    <MudProgressLinear Indeterminate="true" />
+}
+else
+{
+    <MudGrid>
+        <MudItem xs="12" md="7">
+            <ChartCard Title="Tool usage (top 20)">
+                @if (_tools.Count > 0)
+                {
+                    <ApexChart @key="@($"tools-{DataVersion}-{IsDark}")" TItem="ToolUsageRow" Height="500"
+                               Options="Charts.Base<ToolUsageRow>(IsDark, horizontal: true)">
+                        <ApexPointSeries TItem="ToolUsageRow" Items="_tools.Take(20).ToList()" Name="Calls"
+                                         SeriesType="SeriesType.Bar"
+                                         XValue="@(e => e.ToolName)" YValue="@(e => (decimal?)e.Calls)" />
+                    </ApexChart>
+                }
+            </ChartCard>
+        </MudItem>
+        <MudItem xs="12" md="5">
+            <ChartCard Title="Tokens by agent type" Tooltip="From subagent transcripts; the main loop has no agent type.">
+                @if (_agents.Count > 0)
+                {
+                    <ApexChart @key="@($"agents-{DataVersion}-{IsDark}")" TItem="AgentUsageRow" Height="300"
+                               Options="Charts.Base<AgentUsageRow>(IsDark)">
+                        <ApexPointSeries TItem="AgentUsageRow" Items="_agents" Name="Tokens"
+                                         SeriesType="SeriesType.Donut"
+                                         XValue="@(e => e.AgentType)" YValue="@(e => (decimal?)e.Tokens)" />
+                    </ApexChart>
+                }
+                <MudTable T="AgentUsageRow" Items="_agents" Dense="true" Class="mt-2">
+                    <HeaderContent>
+                        <MudTh>Agent type</MudTh>
+                        <MudTh Style="text-align:right">Spawns</MudTh>
+                        <MudTh Style="text-align:right">Tokens</MudTh>
+                        <MudTh Style="text-align:right">Est. value</MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd>@context.AgentType</MudTd>
+                        <MudTd Style="text-align:right">@context.Spawns</MudTd>
+                        <MudTd Style="text-align:right">@GlobalFilterState.Tokens(context.Tokens)</MudTd>
+                        <MudTd Style="text-align:right">@Filters.Cost(context.CostUsd)</MudTd>
+                    </RowTemplate>
+                </MudTable>
+            </ChartCard>
+        </MudItem>
+        <MudItem xs="12">
+            <ChartCard Title="Tool error rates" MinHeight="200"
+                       Tooltip="Errors include environment failures, not only tool bugs. Tools with fewer than 5 calls are hidden.">
+                <MudTable T="ToolUsageRow" Items="_tools.Where(t => t.Calls >= 5).OrderByDescending(t => t.ErrorRate).ToList()"
+                          Dense="true">
+                    <HeaderContent>
+                        <MudTh>Tool</MudTh>
+                        <MudTh Style="text-align:right">Calls</MudTh>
+                        <MudTh Style="text-align:right">Errors</MudTh>
+                        <MudTh Style="text-align:right">Error rate</MudTh>
+                        <MudTh>MCP</MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd>@context.ToolName</MudTd>
+                        <MudTd Style="text-align:right">@context.Calls</MudTd>
+                        <MudTd Style="text-align:right">@context.Errors</MudTd>
+                        <MudTd Style="text-align:right">@((context.ErrorRate * 100).ToString("N1"))%</MudTd>
+                        <MudTd>@(context.IsMcp ? "yes" : "")</MudTd>
+                    </RowTemplate>
+                </MudTable>
+            </ChartCard>
+        </MudItem>
+    </MudGrid>
+}
+
+@code {
+    private List<ToolUsageRow> _tools = [];
+    private List<AgentUsageRow> _agents = [];
+
+    protected override async Task LoadAsync()
+    {
+        var f = Filters.Filter;
+        _tools = await Queries.GetToolUsageAsync(f);
+        _agents = await Queries.GetAgentUsageAsync(f);
+    }
+}
