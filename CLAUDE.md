@@ -74,9 +74,14 @@ Flow: `TranscriptWatcher` (FSW + debounce + 5-min rescan) → `IngestionService`
 - **Subagent files carry roughly half of all tokens.** Their `sessionId` is the *parent* session id
   (the join key); `agentId` / `attributionSkill` come from the record, the rest from sidecar
   `meta.json` / `forked-skill.json`, which may arrive late and are retried on each rescan.
-- **There is no `Skill` tool call.** Skills are detected in three shapes (`in_session`,
-  `local_command`, `forked`); names are normalized without a leading `/`. `local_command` rows are
-  built-in slash commands and never enter the skills scorecard.
+- **There is no `Skill` tool call.** Skills are detected in four record shapes; names are normalized
+  without a leading `/`. `shape` is the *semantic* category, not the record form: `local_command`
+  means built-in slash command (its own table, never the scorecard), `in_session`/`forked` mean real
+  skill. Current CLI builds emit a `user` record whose whole content is command markers, with no
+  marker separating a skill from a built-in — `SkillExtractor.BuiltInCommands` makes that call.
+  **Match the entire content, never a substring:** these marker tags appear verbatim in
+  `IMPLEMENTATION_PLAN.md`, so a "contains" rule counts edits to this repo as skill usage.
+  `SlashCommandShapeTests` pins both false-positive cases.
 - **`tool_events` is two-phase**: INSERT on the assistant's `tool_use` block, UPDATE on the matching
   `tool_result` in the next user record. Deliberately no in-memory pending map — it survives
   restarts and batch boundaries. Lines added/removed come only from `structuredPatch`, never inferred.

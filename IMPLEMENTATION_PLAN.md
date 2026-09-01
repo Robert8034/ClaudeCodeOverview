@@ -11,15 +11,31 @@
 > `deploy/claude-code-overview.service` and a verified `linux-x64 --self-contained` publish. The
 > publish output was smoke-tested by way of a `win-x64` self-contained publish (the Linux binary
 > cannot run on the dev machine): all six pages return 200 in Production with an empty data root.
-> **Remaining: the §12 checks that need the real home setup** — ccusage/`~/.claude.json`
-> cross-checks and the systemd/LAN deployment itself.
+> **§12 verification ran on 2026-09-01 against the real local `~/.claude/projects`** (10 files,
+> 26 MB, CLI 2.1.220/2.1.233/2.1.234) and passed: an independently computed raw-JSONL sum matches the
+> database exactly on every token metric (920 deduped messages, 193,966,269 tokens), plus sessions,
+> agents, tool calls and tool errors; zero parse errors and zero unknown record types or models;
+> re-backfill is deterministic across 16 metrics including cost to 6 decimals; `activity_blocks`
+> sums to the same token total as `usage_events`; and live watching picked up new events within
+> seconds without a restart. **Remaining: the systemd/LAN deployment itself**, and the ccusage
+> comparison.
 >
 > Deviations from the spec: (1) `record_stats` is keyed per file (see schema); (2) stdout-echo
 > `local_command` records (no `<command-name>`) are NOT counted as invocations — only records
 > carrying `<command-name>` are; (3) **Serilog was never added** — logging is the ASP.NET Core
 > default; (4) query DTOs carry `[method: ExplicitConstructor]`, because on an empty database
 > SQLite cannot type an aggregate column and Dapper otherwise fails to bind the record constructor,
-> which made every page 500 on a fresh install (§12 check 5 — found by smoke-testing the publish).
+> which made every page 500 on a fresh install (§12 check 5 — found by smoke-testing the publish);
+> (5) a `cwd` seen only on records that produce no usage or tool rows gets **no** `projects` row,
+> rather than "every parsed record upserts projects" as §6 says — an empty project row would only
+> add noise to the Projects page, and no aggregate is affected; (6) skill detection gained **shape 4**
+> and a built-in-command list (see §2.3 DRIFT) — on real local data this took invocations from 3 to
+> 10 and put `/init` on the scorecard, with token, cost and tool totals unchanged.
+>
+> **Two of the plan's §12 cross-checks are no longer possible as written:** `~/.claude.json` no
+> longer carries the per-project `lastTotalInputTokens`/`lastTotal*` counters (its per-project keys
+> are now MCP/permissions only), so the independent raw-JSONL sum replaced them as the primary
+> ground truth. `skillUsage` in that file does still exist and remains the cross-check for skills.
 
 > **How to use this document.** This is a complete, standalone specification for building a personal
 > Claude Code usage-analytics dashboard. It was produced by a planning session that researched the
@@ -193,6 +209,26 @@ used. A parser that looks for a Skill tool reports 0% skill usage. Skills appear
    `attributionSkill: "code-review"` — this enables full token/cost attribution for forked skills.
 
 `attachment` records with `attachment.type: "skill_listing"` are skill *availability*, not usage — ignore.
+
+> **DRIFT (verified 2026-09-01 against CLI 2.1.220 / 2.1.233 / 2.1.234).** Shapes 1 and 2 above are
+> largely gone. Current builds emit **shape 4: a `user` record whose ENTIRE `message.content` string
+> is command marker tags** — `<command-name>`, `<command-message>`, optional `<command-args>` — with
+> `isMeta`, `turnCompanion` and `<skill-format>` all **absent** (`userType: "external"`, `promptId`
+> present only when the command starts a turn). On real local transcripts the original rules caught
+> **2 of 8** invocations; `skillUsage` in `~/.claude.json` was the tell.
+>
+> Shape 4 carries **no marker separating a skill from a built-in command** — `/init` (a skill,
+> counted in `skillUsage`) is byte-identical in form to `/clear`. Classification therefore uses a
+> maintained list of built-ins (`SkillExtractor.BuiltInCommands`); anything not on it counts as a
+> skill. A wrong entry only moves a row between the scorecard and the built-in table — no total
+> changes. The list deliberately omits `init`/`doctor`/`statusline`/`review`, which Claude Code
+> itself records as skills in `skillUsage`.
+>
+> **Match the whole content, never a substring.** These marker tags appear verbatim in this very
+> document, so a "content contains `<command-name>`" rule counts edits to
+> `IMPLEMENTATION_PLAN.md` as skill invocations. The parser requires that nothing but whitespace
+> remains once the known marker tags are removed, and `tests/…/SlashCommandShapeTests.cs` pins both
+> false-positive cases (prose, and a `tool_result` quoting the tags).
 
 ### 2.4 Other machine-local sources (v2 candidates; used for verification in v1)
 

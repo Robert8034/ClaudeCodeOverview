@@ -181,3 +181,23 @@ On error records the top-level `toolUseResult` is a plain STRING starting with
 The session contains 6 records with `subtype:"local_command"`, but 3 of them are `<local-command-stdout>`
 result echoes with no `<command-name>`. Only the 3 records carrying `<command-name>` are actual
 invocations; counting stdout echoes would double-count every built-in command.
+
+## marker_only_commands.jsonl (6 lines) — SYNTHESIZED
+
+Added 2026-09-01. No real fixture existed for the shape current CLI builds actually emit
+(2.1.220 / 2.1.233 / 2.1.234), so these lines are synthesized to match the structure observed on
+real local transcripts, with a neutral `cwd` and no real prompt text. Structure copied faithfully:
+`user` record, `message.content` a STRING containing only marker tags, `isMeta` / `turnCompanion` /
+`skill-format` all absent, `userType: "external"`, `promptId` present only on turn-starting commands.
+
+| # | record | expected |
+|---|--------|----------|
+| 1 | `/clear`, marker-only | `local_command` (built-in) |
+| 2 | `/model` carrying command args | `local_command`, args captured |
+| 3 | `/init`, with the message-before-name ordering seen in real data | `in_session` — a skill, since Claude Code counts it in `skillUsage` |
+| 4 | stdout echo with no command name | NOT an invocation |
+| 5 | user prose *describing* the marker tags | NOT an invocation |
+| 6 | a `tool_result` block quoting the tags, with `structuredPatch` | NOT an invocation |
+
+Lines 5 and 6 are the important ones: these marker tags appear verbatim inside this repo's
+`IMPLEMENTATION_PLAN.md`, so a substring rule would count edits to that file as skill usage.

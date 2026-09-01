@@ -52,6 +52,15 @@ public static class TranscriptLineParser
                             rec.Uuid ?? $"{ctx.FileId}:{i}", sessionId, lastCwd, effectiveTs,
                             skillName, "in_session", rec.AgentId ?? ctx.AgentId, skillArgs));
                     }
+                    // Newer CLI builds drop isMeta/turnCompanion/skill-format and emit a record whose
+                    // whole content is command markers — for skills and built-in commands alike.
+                    else if (SkillExtractor.TryExtractMarkerOnlyCommand(rec, out var markerName, out var markerArgs))
+                    {
+                        batch.Skills.Add(new SkillRow(
+                            rec.Uuid ?? $"{ctx.FileId}:{i}", sessionId, lastCwd, effectiveTs,
+                            markerName, SkillExtractor.ClassifyShape(markerName),
+                            rec.AgentId ?? ctx.AgentId, markerArgs));
+                    }
                     batch.TouchSession(sessionId, lastCwd, ts, rec.GitBranch, rec.Version);
                     break;
                 case "system":
@@ -70,7 +79,7 @@ public static class TranscriptLineParser
                     {
                         batch.Skills.Add(new SkillRow(
                             rec.Uuid ?? $"{ctx.FileId}:{i}", sessionId, lastCwd, effectiveTs,
-                            cmdName, "local_command", null, cmdArgs));
+                            cmdName, SkillExtractor.ClassifyShape(cmdName), null, cmdArgs));
                     }
                     batch.TouchSession(sessionId, lastCwd, ts, rec.GitBranch, rec.Version);
                     break;
