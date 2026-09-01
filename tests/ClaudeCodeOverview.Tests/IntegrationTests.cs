@@ -36,21 +36,8 @@ public class IntegrationTests
                 .ToDictionary(p => p.Name, p => p.Value.GetInt32()));
     }
 
-    private static void IngestFixtureSession(TestDb db, IngestRepository repo)
-    {
-        var costs = new CostCalculator(CostCalculator.DefaultSeed);
-        var path = Fixtures.PathOf("session_small.jsonl");
-        var info = TranscriptPaths.Classify(path);
-        var (fileId, offset) = repo.EnsureFile(db.Connection, path, info.SessionId, info.AgentId);
-        var tail = FileTailer.ReadNewLines(path, offset);
-        var ctx = new FileContext(fileId, path, info.SessionId, info.AgentId, info.WorkflowId, null,
-            DateTimeOffset.UtcNow);
-        var batch = TranscriptLineParser.Parse(ctx, tail.Lines);
-        Assert.Empty(batch.Errors);
-        repo.ApplyBatch(db.Connection, ctx, batch, tail.NewOffset, new FileInfo(path).Length,
-            DateTimeOffset.UtcNow, costs);
-        BlockCalculator.RebuildAll(db.Connection);
-    }
+    private static void IngestFixtureSession(TestDb db, IngestRepository repo) =>
+        Assert.Empty(Fixtures.Ingest(db, repo, "session_small.jsonl").Errors);
 
     [Fact]
     public void Full_session_matches_independently_computed_totals()

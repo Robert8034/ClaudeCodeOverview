@@ -69,7 +69,7 @@ overridden by an environment variable using `__` as the separator
 
 | Key | Default | Notes |
 |---|---|---|
-| `DataRoot` | `~/.claude/projects` | Transcript root. **Created if missing** — a wrong path yields an empty dashboard, not an error. |
+| `DataRoot` | `~/.claude/projects` | Transcript root. Created if missing, so a wrong path yields an empty dashboard rather than an error — except under the hardened systemd unit, where creating it is denied and the service refuses to start (see below). |
 | `DatabasePath` | `<LocalAppData>/ClaudeCodeOverview/usage.db` | SQLite file (WAL). Set this explicitly in production — see the systemd note below. |
 | `Port` | `5199` | Kestrel binds `http://0.0.0.0:<Port>`. |
 | `RescanIntervalMinutes` | `5` | Full rescan; catches missed file events, late sidecars and deletions. |
@@ -165,6 +165,12 @@ Two details in that unit are load-bearing:
   `$HOME`, the default resolves to a *relative* path and the database would land inside the publish
   directory, to be wiped by the next deploy. `StateDirectory=claude-overview` creates and owns
   `/var/lib/claude-overview` for it.
+
+- **`ConditionPathIsDirectory` guards the mirror path.** Locally the app creates a missing
+  `DataRoot`; under `ProtectSystem=strict` that is denied, the ingester's exception stops the host,
+  and `Restart=always` would turn a typo'd path into a silent five-second crash loop. With the
+  condition, `systemctl status` says the unit was skipped and names the path. Keep it in sync with
+  `ClaudeOverview__DataRoot`.
 
 The service user must be able to read the mirror. If Syncthing runs as a different user, add
 `claudeoverview` to its group or grant an ACL on `/srv/claude-mirror`.

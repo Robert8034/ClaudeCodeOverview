@@ -4,6 +4,12 @@ Documentation=https://github.com/Robert8034/ClaudeCodeOverview
 After=network-online.target
 Wants=network-online.target
 
+# Fail fast and legibly if the mirror is not there yet (Syncthing not set up, wrong path).
+# Without this the app tries to CREATE the missing DataRoot, which ProtectSystem=strict below
+# forbids; the unhandled exception stops the host and Restart=always turns it into a crash loop.
+# Keep this path in sync with ClaudeOverview__DataRoot.
+ConditionPathIsDirectory=/srv/claude-mirror/projects
+
 [Service]
 # Type=simple, NOT notify: sd_notify readiness requires the
 # Microsoft.Extensions.Hosting.Systemd package + builder.Host.UseSystemd(), which this app
