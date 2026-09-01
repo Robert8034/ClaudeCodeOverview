@@ -3,6 +3,7 @@ using ClaudeCodeOverview.Core.Ingestion;
 namespace ClaudeCodeOverview.Core.Pricing;
 
 /// <summary>One pricing row; all rates are USD per million tokens.</summary>
+[method: Dapper.ExplicitConstructor]
 public sealed record PricingRow(
     string ModelPattern, double InUsd, double OutUsd,
     double CacheW5mUsd, double CacheW1hUsd, double CacheRUsd);

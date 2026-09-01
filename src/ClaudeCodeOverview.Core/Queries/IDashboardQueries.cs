@@ -1,4 +1,5 @@
 using ClaudeCodeOverview.Core.Pricing;
+using Dapper;
 
 namespace ClaudeCodeOverview.Core.Queries;
 
@@ -14,21 +15,27 @@ public sealed record HeadlineStats(
     long Cache5m, long Cache1h, double CostUsd, double CacheSavingsUsd,
     long Sessions, long Turns, long ActiveSessions);
 
+[method: ExplicitConstructor] // bind by name: expression columns report as BLOB on an empty result set
 public sealed record DailyPoint(string DayLocal, string Key, long Tokens, double CostUsd);
 
+[method: ExplicitConstructor] // bind by name: expression columns report as BLOB on an empty result set
 public sealed record ModelMixRow(string Model, long Tokens, double CostUsd, long Turns, bool Unpriced);
 
+[method: ExplicitConstructor] // bind by name: expression columns report as BLOB on an empty result set
 public sealed record ProjectSummary(
     long ProjectId, string Cwd, string? Slug, long Tokens, double CostUsd,
     long Sessions, string? LastActivityUtc);
 
+[method: ExplicitConstructor] // bind by name: expression columns report as BLOB on an empty result set
 public sealed record SessionSummary(
     string SessionId, string? Title, string? GitBranch, string? FirstTsUtc, string? LastTsUtc,
     long Turns, long Tokens, double CostUsd, long SubagentCount, long ToolErrors);
 
+[method: ExplicitConstructor] // bind by name: expression columns report as BLOB on an empty result set
 public sealed record SessionTurn(string TsUtc, string Model, string? Effort, long InputTokens, long OutputTokens,
     long CacheCreation, long CacheRead, double? CostUsd, string? AgentId, string? AttributionSkill);
 
+[method: ExplicitConstructor] // bind by name: expression columns report as BLOB on an empty result set
 public sealed record SessionAgent(string AgentId, string? ParentAgentId, string? AgentType, string? Description,
     int? SpawnDepth, string? WorkflowId, string? SkillName, long Tokens, double CostUsd);
 
@@ -36,21 +43,28 @@ public sealed record SessionDetail(
     string SessionId, string? Title, string? GitBranch, string? CliVersion,
     List<SessionTurn> Turns, List<SessionAgent> Agents, List<string> Skills);
 
+[method: ExplicitConstructor] // bind by name: expression columns report as BLOB on an empty result set
 public sealed record SkillScorecardRow(
     string SkillName, long Invocations, long InvocationsLast30, long InvocationsPrior30,
     string Shapes, long AttributedTokens, double AttributedCostUsd,
     long AttributedToolCalls, long AttributedToolErrors, double? MedianRunSeconds);
 
+[method: ExplicitConstructor] // bind by name: expression columns report as BLOB on an empty result set
 public sealed record BuiltinCommandRow(string CommandName, long Invocations, string? LastUsedUtc);
 
+[method: ExplicitConstructor] // bind by name: expression columns report as BLOB on an empty result set
 public sealed record SkillDailyPoint(string DayLocal, long Invocations, long AttributedTokens);
 
+[method: ExplicitConstructor] // bind by name: expression columns report as BLOB on an empty result set
 public sealed record ToolUsageRow(string ToolName, long Calls, long Errors, double ErrorRate, bool IsMcp);
 
+[method: ExplicitConstructor] // bind by name: expression columns report as BLOB on an empty result set
 public sealed record AgentUsageRow(string AgentType, long Spawns, long Tokens, double CostUsd);
 
+[method: ExplicitConstructor] // bind by name: expression columns report as BLOB on an empty result set
 public sealed record HeatmapCell(string DayLocal, long Sessions, long Tokens, double CostUsd);
 
+[method: ExplicitConstructor] // bind by name: expression columns report as BLOB on an empty result set
 public sealed record BlockInfo(string StartUtc, string EndUtc, long Tokens, double CostUsd, long Messages);
 
 public sealed record RateWindows(
@@ -58,10 +72,13 @@ public sealed record RateWindows(
     long Rolling7dTokens, double Rolling7dCostUsd,
     List<BlockInfo> RecentBlocks);
 
+[method: ExplicitConstructor] // bind by name: expression columns report as BLOB on an empty result set
 public sealed record ProductivityDay(string DayLocal, long LinesAdded, long LinesRemoved, long Commits);
 
+[method: ExplicitConstructor] // bind by name: expression columns report as BLOB on an empty result set
 public sealed record DurationBucket(string Label, long SessionCount);
 
+[method: ExplicitConstructor] // bind by name: expression columns report as BLOB on an empty result set
 public sealed record ParseErrorRow(string File, long? LineNo, string TsUtc, string? Snippet);
 
 public sealed record DataHealth(

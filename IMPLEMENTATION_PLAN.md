@@ -7,11 +7,19 @@
 > 26-test suite (all green) with fixtures cut from real transcripts. Verified end-to-end against
 > real `~/.claude` data (0 parse errors; totals match independently computed ground truth; live
 > session ingestion works). A minimal Blazor Overview page proves the wiring.
-> **Remaining: §11 step 5 (the full dashboard UI — MudBlazor + Blazor-ApexCharts pages) and
-> step 6 (README, linux-x64 publish, systemd unit), plus the §12 checks on the home setup.**
-> Two deviations from the spec, both improvements found during verification: `record_stats` is
-> keyed per file (see schema), and stdout-echo `local_command` records (no `<command-name>`) are
-> NOT counted as invocations — only records carrying `<command-name>` are.
+> **UPDATE (2026-09-01): §11 steps 5 and 6 are DONE too** — the full dashboard UI, plus `README.md`,
+> `deploy/claude-code-overview.service` and a verified `linux-x64 --self-contained` publish. The
+> publish output was smoke-tested by way of a `win-x64` self-contained publish (the Linux binary
+> cannot run on the dev machine): all six pages return 200 in Production with an empty data root.
+> **Remaining: the §12 checks that need the real home setup** — ccusage/`~/.claude.json`
+> cross-checks and the systemd/LAN deployment itself.
+>
+> Deviations from the spec: (1) `record_stats` is keyed per file (see schema); (2) stdout-echo
+> `local_command` records (no `<command-name>`) are NOT counted as invocations — only records
+> carrying `<command-name>` are; (3) **Serilog was never added** — logging is the ASP.NET Core
+> default; (4) query DTOs carry `[method: ExplicitConstructor]`, because on an empty database
+> SQLite cannot type an aggregate column and Dapper otherwise fails to bind the record constructor,
+> which made every page 500 on a fresh install (§12 check 5 — found by smoke-testing the publish).
 
 > **How to use this document.** This is a complete, standalone specification for building a personal
 > Claude Code usage-analytics dashboard. It was produced by a planning session that researched the

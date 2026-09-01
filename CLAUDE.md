@@ -36,8 +36,11 @@ dotnet run --project src/ClaudeCodeOverview.Web         # serves http://0.0.0.0:
   `$env:ClaudeOverview__DataRoot='<dir>'; $env:ClaudeOverview__DatabasePath='<file>'; dotnet run --project src/ClaudeCodeOverview.Web`
 - `Program.cs` calls `UseUrls(...Port)` — port **5199** always wins; the `5143`/`7023` in
   `launchSettings.json` are dead values.
-- Remaining work per plan §11 step 6: README, `dotnet publish -c Release -r linux-x64 --self-contained`,
-  systemd unit (that publish command is the plan's target, not yet run).
+- Deployment (`README.md`, `deploy/claude-code-overview.service`) is done:
+  `dotnet publish src/ClaudeCodeOverview.Web -c Release -r linux-x64 --self-contained -o out`.
+  The Linux binary can't be executed here — smoke-test publish changes with a `win-x64`
+  self-contained publish and curl the pages; that runs in **Production**, which `dotnet run`
+  (Development, via launchSettings) does not exercise.
 
 ## Architecture
 
@@ -58,6 +61,11 @@ Flow: `TranscriptWatcher` (FSW + debounce + 5-min rescan) → `IngestionService`
   runs on that one loop. Everything else opens short-lived read connections via `Db.Open` (WAL).
   `DashboardQueries.UpsertPricingAsync` is the one deliberate second writer.
 - **`IDashboardQueries` is the UI↔storage seam.** Razor components never touch SQL or SQLite types.
+- **Query DTOs need `[method: ExplicitConstructor]`.** With zero rows SQLite cannot type an
+  expression column (`SUM`/`COUNT`/…), so Microsoft.Data.Sqlite reports it as BLOB and Dapper
+  refuses to bind a positional record constructor — the whole page 500s on a fresh install. `CAST`
+  does not help; the attribute (which makes Dapper bind by parameter name) does. Add it to any new
+  Dapper-materialized record and keep `EmptyDatabaseTests` covering every query method.
 - **`CostCalculator` is the only place cost/savings formulas live.** Longest-prefix match on
   `model_pattern`; an unknown model yields `NULL` cost — never 0. Net savings subtracts the cache
   write premium. Editing a price re-derives all `usage_events` and rebuilds `activity_blocks`.

@@ -1,0 +1,55 @@
+[Unit]
+Description=Claude Code Overview — usage dashboard for Claude Code transcripts
+Documentation=https://github.com/Robert8034/ClaudeCodeOverview
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+# Type=simple, NOT notify: sd_notify readiness requires the
+# Microsoft.Extensions.Hosting.Systemd package + builder.Host.UseSystemd(), which this app
+# does not use. With Type=notify systemd would wait for a ping that never comes and kill the
+# service at TimeoutStartSec.
+Type=simple
+
+# The user must be able to READ the Syncthing mirror. If Syncthing runs as another user,
+# add this user to Syncthing's group (or grant an ACL on the mirror directory).
+User=claudeoverview
+Group=claudeoverview
+
+WorkingDirectory=/opt/claude-code-overview
+ExecStart=/opt/claude-code-overview/ClaudeCodeOverview.Web
+
+# Config lives HERE, not in the published appsettings.json — `dotnet publish` overwrites that
+# file on every redeploy, silently reverting operator edits. `__` is the .NET separator for
+# nested configuration keys (ClaudeOverview:DataRoot).
+Environment=DOTNET_ENVIRONMENT=Production
+Environment=ASPNETCORE_ENVIRONMENT=Production
+Environment=ClaudeOverview__DataRoot=/srv/claude-mirror/projects
+Environment=ClaudeOverview__DatabasePath=/var/lib/claude-overview/usage.db
+Environment=ClaudeOverview__Port=5199
+Environment=ClaudeOverview__RescanIntervalMinutes=5
+Environment=ClaudeOverview__Currency__Display=EUR
+Environment=ClaudeOverview__Currency__UsdToEur=0.86
+
+# Creates and chowns /var/lib/claude-overview before start. Keep this in sync with
+# ClaudeOverview__DatabasePath above: leaving DatabasePath unset on Linux resolves to
+# $HOME/.local/share, which under a system user without $HOME degrades to a RELATIVE path —
+# the database would land in WorkingDirectory and be wiped by the next redeploy.
+StateDirectory=claude-overview
+StateDirectoryMode=0750
+
+Restart=always
+RestartSec=5
+
+# Hardening. The app only needs to read the mirror and write its own state directory.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadOnlyPaths=/srv/claude-mirror
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+
+[Install]
+WantedBy=multi-user.target
