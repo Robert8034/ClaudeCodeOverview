@@ -1,0 +1,7 @@
+* text=auto
+
+# Files that are consumed by Linux verbatim must keep LF even when checked out on Windows
+# (core.autocrlf=true). systemd does not strip a trailing CR, so CRLF would smuggle "\r" into
+# every Environment= value in the unit file.
+*.service text eol=lf
+*.sh      text eol=lf
