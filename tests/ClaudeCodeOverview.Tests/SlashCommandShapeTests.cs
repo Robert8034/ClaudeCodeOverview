@@ -59,6 +59,15 @@ public class SlashCommandShapeTests
         Assert.DoesNotContain(batch.Skills, s => s.SkillName.Contains("Login", StringComparison.OrdinalIgnoreCase));
     }
 
+    [Fact]
+    public void A_command_name_nested_inside_a_stdout_echo_is_not_an_invocation()
+    {
+        // Fixture line 7. The echo reports a command that already ran; counting it would double
+        // every built-in invocation. Echo wrappers are stripped with their payload before matching.
+        var batch = Parse("marker_only_commands.jsonl");
+        Assert.DoesNotContain(batch.Skills, s => s.SkillName == "deploy");
+    }
+
     [Theory]
     [InlineData("clear", "local_command")]
     [InlineData("/model", "local_command")]

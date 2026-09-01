@@ -93,6 +93,12 @@ Flow: `TranscriptWatcher` (FSW + debounce + 5-min rescan) → `IngestionService`
   fallback id) and used by every filter and index.
 - Schema changes go in a new embedded `Data/Migrations/NNN_*.sql`; `Migrator` applies them in name
   order tracked by `schema_version`. Never edit an applied script.
+- **A parser change does not fix existing databases.** `FindChangedFiles` skips any file whose size
+  equals its stored offset, and `skill_invocations` inserts are INSERT OR IGNORE, so newly-recognised
+  records in already-consumed bytes stay invisible. Put one-time fixes in `Data/DataUpgrades.cs`
+  (guarded by a `settings` key, run by the ingestion service after `Migrator`): reclassify stored
+  rows in place, then `ResetFile` the transcripts still on disk so backfill re-reads them. Never
+  rewind a file that has vanished — those rows are the only remaining record of it.
 
 ### UI pattern
 

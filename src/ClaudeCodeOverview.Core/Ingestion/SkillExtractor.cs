@@ -49,12 +49,18 @@ public static partial class SkillExtractor
     [GeneratedRegex("<forked-skill-launch>(\\{.*?\\})</forked-skill-launch>", RegexOptions.Singleline)]
     private static partial Regex ForkedLaunchRegex();
 
-    /// <summary>Every tag that may legitimately appear in a command-invocation record.</summary>
-    [GeneratedRegex(
-        "<(command-name|command-message|command-args|skill-format|local-command-stdout|local-command-caveat)>" +
-        ".*?</\\1>",
+    /// <summary>
+    /// Wrappers whose CONTENT is echoed output or boilerplate, not an invocation. Removed first,
+    /// nested payload and all: a &lt;command-name&gt; quoted *inside* a stdout echo describes a command
+    /// that already ran, and counting it would double every built-in invocation.
+    /// </summary>
+    [GeneratedRegex("<(local-command-stdout|local-command-caveat)>.*?</\\1>", RegexOptions.Singleline)]
+    private static partial Regex WrapperTagRegex();
+
+    /// <summary>The tags that constitute an invocation record.</summary>
+    [GeneratedRegex("<(command-name|command-message|command-args|skill-format)>.*?</\\1>",
         RegexOptions.Singleline)]
-    private static partial Regex MarkerTagRegex();
+    private static partial Regex CommandTagRegex();
 
     public const string SkillFormatMarker = "<skill-format>true</skill-format>";
 
@@ -94,13 +100,15 @@ public static partial class SkillExtractor
         var content = el.GetString();
         if (content is null || content.Length == 0) return false;
 
-        var m = CommandNameRegex().Match(content);
+        // Drop echoed output first, so a command name nested inside it cannot pose as an invocation.
+        var payload = WrapperTagRegex().Replace(content, string.Empty);
+        var m = CommandNameRegex().Match(payload);
         if (!m.Success) return false;
-        // Everything outside the known marker tags must be whitespace.
-        if (!string.IsNullOrWhiteSpace(MarkerTagRegex().Replace(content, string.Empty))) return false;
+        // Everything outside the invocation tags must be whitespace.
+        if (!string.IsNullOrWhiteSpace(CommandTagRegex().Replace(payload, string.Empty))) return false;
 
         commandName = NormalizeName(m.Groups[1].Value);
-        var a = CommandArgsRegex().Match(content);
+        var a = CommandArgsRegex().Match(payload);
         args = a.Success && a.Groups[1].Value.Length > 0 ? a.Groups[1].Value : null;
         return commandName.Length > 0;
     }

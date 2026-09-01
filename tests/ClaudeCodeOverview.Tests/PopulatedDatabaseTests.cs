@@ -32,6 +32,14 @@ public class PopulatedDatabaseTests
             UPDATE agents SET agent_type = 'general-purpose', spawn_depth = 1
             WHERE agent_type IS NULL;
 
+            -- The fixtures' subagent usage rows carry an agentId whose sidecar lives outside this
+            -- repo, and a fixture file is not named after its session the way a real transcript is,
+            -- so agents/usage/sessions are not joined up. Stitch them together, since the point here
+            -- is DTO binding, not ingestion.
+            INSERT OR IGNORE INTO agents(agent_id, session_id, agent_type, spawn_depth)
+            SELECT DISTINCT agent_id, session_id, 'general-purpose', 1
+            FROM usage_events WHERE agent_id IS NOT NULL;
+
             INSERT INTO tool_events(tool_use_id, session_id, project_id, ts_utc, day_local,
                                     tool_name, is_error, is_git_commit, lines_added, lines_removed)
             SELECT 'toolu_synthetic_commit', session_id, project_id, ts_utc, day_local,
@@ -112,6 +120,20 @@ public class PopulatedDatabaseTests
             Assert.False(string.IsNullOrEmpty(t.Model));
         });
         Assert.True(detail.Turns.Sum(t => t.OutputTokens) > 0, "turn tokens");
+
+        // SessionAgent binds through the same by-name mechanism; find the session that has agents.
+        var agentSessionId = db.Connection.ExecuteScalar<string>(
+            "SELECT s.id FROM sessions s JOIN agents a ON a.session_id = s.id LIMIT 1");
+        Assert.False(string.IsNullOrEmpty(agentSessionId), "seed should link an agent to a session");
+        var agentDetail = await q.GetSessionDetailAsync(agentSessionId!);
+        Assert.NotNull(agentDetail);
+        Assert.NotEmpty(agentDetail!.Agents);
+        Assert.All(agentDetail.Agents, a =>
+        {
+            Assert.False(string.IsNullOrEmpty(a.AgentId));
+            Assert.False(string.IsNullOrEmpty(a.AgentType));
+        });
+        Assert.True(agentDetail.Agents.Sum(a => a.Tokens) > 0, "agent tokens");
 
         var builtins = await q.GetBuiltinCommandsAsync(all);
         Assert.NotEmpty(builtins);

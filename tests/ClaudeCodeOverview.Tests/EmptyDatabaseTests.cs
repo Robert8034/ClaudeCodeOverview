@@ -66,8 +66,14 @@ public class EmptyDatabaseTests
 
         await q.UpsertPricingAsync(new Core.Pricing.PricingRow("claude-test-1", 1, 2, 3, 4, 5));
         var rows = await q.GetPricingAsync();
+        // All six rates, not just two: a silent zero on a cache rate would quietly corrupt every
+        // cost and savings figure through CostCalculator.
         var row = Assert.Single(rows);
         Assert.Equal("claude-test-1", row.ModelPattern);
+        Assert.Equal(1, row.InUsd);
         Assert.Equal(2, row.OutUsd);
+        Assert.Equal(3, row.CacheW5mUsd);
+        Assert.Equal(4, row.CacheW1hUsd);
+        Assert.Equal(5, row.CacheRUsd);
     }
 }

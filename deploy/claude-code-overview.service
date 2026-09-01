@@ -30,6 +30,12 @@ ExecStart=/opt/claude-code-overview/ClaudeCodeOverview.Web
 # nested configuration keys (ClaudeOverview:DataRoot).
 Environment=DOTNET_ENVIRONMENT=Production
 Environment=ASPNETCORE_ENVIRONMENT=Production
+
+# ASP.NET Core Data Protection (antiforgery tokens, Blazor circuit state) persists its keys under
+# $HOME by default. The service user has no home and ProtectHome=true hides /home anyway, so
+# without this the keys are in-memory: every restart invalidates open browser tabs and logs a
+# warning. Point HOME at the state directory created below.
+Environment=HOME=/var/lib/claude-overview
 Environment=ClaudeOverview__DataRoot=/srv/claude-mirror/projects
 Environment=ClaudeOverview__DatabasePath=/var/lib/claude-overview/usage.db
 Environment=ClaudeOverview__Port=5199
